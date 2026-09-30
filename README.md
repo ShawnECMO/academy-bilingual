@@ -1,4 +1,4 @@
-# 中英對照 for Claude Academy（非官方）
+# 中英對照 for Claude Academy
 
 https://github.com/user-attachments/assets/5f3d8228-874a-4478-9159-d1ef6ad3fdf2
 

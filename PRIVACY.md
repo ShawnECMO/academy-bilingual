@@ -2,7 +2,7 @@
 
 最後更新日期：2026 年 9 月 30 日
 
-「中英對照 for Claude Academy（非官方）」是一款非官方 Chrome 擴充功能，用於在 Claude Academy 繁體中文課程頁面下方顯示相對應的官方英文原文。
+「中英對照 for Claude Academy」是一款非官方 Chrome 擴充功能，用於在 Claude Academy 繁體中文課程頁面下方顯示相對應的官方英文原文。
 
 ## 處理的資料
 
