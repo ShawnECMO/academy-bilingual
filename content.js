@@ -105,6 +105,18 @@
     return getList();
   }
 
+  // 網站的箭頭、錨點等圖示是 icon font 字元（私用區 U+E000–U+F8FF），
+  // 包在 aria-hidden 的 span 裡。直接取 innerText 會把它們一起抓進來，
+  // 換成我們的字型後就變成奇怪符號，所以先拿掉裝飾元素再取文字。
+  function cleanText(el) {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('[aria-hidden="true"], svg, .bi-en').forEach(n => n.remove());
+    return (c.textContent || '')
+      .replace(/[-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   async function apply() {
     if (running) return;
     running = true;
@@ -133,8 +145,8 @@
       zh.forEach((z, i) => {
         const e = en[i];
         if (!e) return;
-        const t = e.innerText.trim();
-        if (!t || t === z.innerText.trim()) return;
+        const t = cleanText(e);
+        if (!t || t === cleanText(z)) return;
         const d = document.createElement('div');
         d.className = 'bi-en';
         d.textContent = t;
