@@ -13,6 +13,7 @@
   // ────────────────────────────────────────────────────────────
 
   const SEL = 'main h1, main h2, main h3, main h4, main p, main li';
+  const LOG = '[Parallel Reader]';
   let visible = true;
   let running = false;
   let lastUrl = '';
@@ -117,6 +118,30 @@
       .trim();
   }
 
+  // ── 載入目標語言頁面 ───────────────────────────────────────
+  // 課程內容是伺服器端輸出的，直接抓 HTML 解析就好，不用開 iframe
+  // 跑整個網站的 JS。任何失敗（逾時、非 200、被轉到別的語系）都回傳
+  // null，讓呼叫端安靜放棄，不重試。
+  const FETCH_TIMEOUT_MS = 10000;
+
+  async function loadDocument(url, signal) {
+    if (!url) return null;
+    const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        credentials: 'same-origin',
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
+      if (!res.ok) return null;
+      return new DOMParser().parseFromString(await res.text(), 'text/html');
+    } catch (err) {
+      if (err.name !== 'AbortError' && err.name !== 'TimeoutError') {
+        console.warn(`${LOG} 無法載入 ${url}`, err.message);
+      }
+      return null;
+    }
+  }
+
   async function apply() {
     if (running) return;
     running = true;
@@ -124,22 +149,12 @@
       document.querySelectorAll('.bi-en').forEach(e => e.remove());
       const zh = await waitForContent(() => [...document.querySelectorAll(SEL)]);
 
-      const f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;height:900px;visibility:hidden';
-      f.src = PRLocale.buildTargetUrl(location.href);
-      document.body.appendChild(f);
-      await new Promise(r => (f.onload = r));
-
-      let en = [];
-      for (let i = 0; i < 30; i++) {
-        await sleep(300);
-        en = [...f.contentDocument.querySelectorAll(SEL)];
-        if (en.length >= zh.length) break;
-      }
-      f.remove();
+      const doc = await loadDocument(PRLocale.buildTargetUrl(location.href));
+      if (!doc) return;
+      const en = [...doc.querySelectorAll(SEL)];
 
       if (en.length !== zh.length) {
-        console.warn(`[中英對照] 段落數不一致 zh=${zh.length} en=${en.length}，可能有錯位`);
+        console.warn(`${LOG} 段落數不一致 source=${zh.length} target=${en.length}`);
       }
 
       zh.forEach((z, i) => {
@@ -154,7 +169,7 @@
         z.appendChild(d);
       });
     } catch (err) {
-      console.error('[中英對照] 失敗', err);
+      console.error(`${LOG} 失敗`, err);
     } finally {
       running = false;
     }
