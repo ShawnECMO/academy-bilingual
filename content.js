@@ -12,7 +12,6 @@
   //   原本的藍 light:#2563eb / dark:#7ea6f5
   // ────────────────────────────────────────────────────────────
 
-  const SEL = 'main h1, main h2, main h3, main h4, main p, main li';
   const LOG = '[Parallel Reader]';
   let visible = true;
   let running = false;
@@ -106,18 +105,6 @@
     return getList();
   }
 
-  // 網站的箭頭、錨點等圖示是 icon font 字元（私用區 U+E000–U+F8FF），
-  // 包在 aria-hidden 的 span 裡。直接取 innerText 會把它們一起抓進來，
-  // 換成我們的字型後就變成奇怪符號，所以先拿掉裝飾元素再取文字。
-  function cleanText(el) {
-    const c = el.cloneNode(true);
-    c.querySelectorAll('[aria-hidden="true"], svg, .bi-en').forEach(n => n.remove());
-    return (c.textContent || '')
-      .replace(/[-]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
   // ── 載入目標語言頁面 ───────────────────────────────────────
   // 課程內容是伺服器端輸出的，直接抓 HTML 解析就好，不用開 iframe
   // 跑整個網站的 JS。任何失敗（逾時、非 200、被轉到別的語系）都回傳
@@ -142,32 +129,45 @@
     }
   }
 
+  // ── 顯示 ───────────────────────────────────────────────────
+  function clear() {
+    document.querySelectorAll('[data-pr]').forEach(e => e.remove());
+  }
+
+  function render(source, target, pairs) {
+    for (const [i, j] of pairs) {
+      const s = source[i];
+      const t = target[j];
+      // 專有名詞、程式碼這種兩邊一樣的就不重複顯示
+      if (!t.text || t.text === s.text) continue;
+      const d = document.createElement('div');
+      d.className = 'bi-en';
+      d.dataset.pr = '';
+      d.textContent = t.text;
+      d.hidden = !visible;
+      s.el.appendChild(d);
+    }
+  }
+
   async function apply() {
     if (running) return;
     running = true;
     try {
-      document.querySelectorAll('.bi-en').forEach(e => e.remove());
-      const zh = await waitForContent(() => [...document.querySelectorAll(SEL)]);
+      clear();
+      await waitForContent(() => [...document.querySelectorAll(PRMatch.SELECTOR)]);
+      const source = PRMatch.extractBlocks(document);
 
       const doc = await loadDocument(PRLocale.buildTargetUrl(location.href));
       if (!doc) return;
-      const en = [...doc.querySelectorAll(SEL)];
+      const target = PRMatch.extractBlocks(doc);
 
-      if (en.length !== zh.length) {
-        console.warn(`${LOG} 段落數不一致 source=${zh.length} target=${en.length}`);
+      const { pairs, mode, skipped } = PRMatch.matchBlocks(source, target);
+      if (mode === 'mismatch') {
+        console.info(`${LOG} 頁面結構不同，這頁不顯示對照 source=${source.length} target=${target.length}`);
+      } else if (skipped) {
+        console.info(`${LOG} ${skipped} 個章節結構不同，已略過`);
       }
-
-      zh.forEach((z, i) => {
-        const e = en[i];
-        if (!e) return;
-        const t = cleanText(e);
-        if (!t || t === cleanText(z)) return;
-        const d = document.createElement('div');
-        d.className = 'bi-en';
-        d.textContent = t;
-        d.hidden = !visible;
-        z.appendChild(d);
-      });
+      render(source, target, pairs);
     } catch (err) {
       console.error(`${LOG} 失敗`, err);
     } finally {
@@ -183,7 +183,7 @@
   btn.onclick = () => {
     visible = !visible;
     btn.classList.toggle('bi-off', !visible);
-    document.querySelectorAll('.bi-en').forEach(e => (e.hidden = !visible));
+    document.querySelectorAll('[data-pr]').forEach(e => (e.hidden = !visible));
   };
   document.body.appendChild(btn);
 
