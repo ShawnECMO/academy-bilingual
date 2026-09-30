@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "中英對照 for Claude Academy（非官方）",
+  "short_name": "中英對照",
+  "version": "1.0.0",
+  "description": "非官方工具：在 Claude Academy 繁中頁面的每段下方顯示英文原文，方便對照學習。與 Anthropic 無關。",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://academy.claude.com/zh-TW/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
