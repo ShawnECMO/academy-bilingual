@@ -1,4 +1,9 @@
 (() => {
+  // 擴充功能重新載入 / 更新時，舊的 content script 可能還留在頁面上。
+  // 用一個全域旗標確保同一頁只跑一份。
+  if (window.__parallelReader) return;
+  window.__parallelReader = true;
+
   // ── 配色設定（想換色只改這裡）────────────────────────────────
   // 亮色模式用深一點的磚紅，暗色模式用柔和的淺橘，
   // 在黑底上不刺眼，也不會跟正文搶焦點。
@@ -14,8 +19,9 @@
 
   const LOG = '[Parallel Reader]';
   let visible = true;
-  let running = false;
   let lastUrl = '';
+  let lastHeading = ''; // 上一頁的 h1，用來判斷 SPA 換頁後內容換好了沒
+  let current = null; // 目前這一輪的 AbortController
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -96,14 +102,25 @@
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
 
-  async function waitForContent(getList, minCount = 1, tries = 30) {
-    for (let i = 0; i < tries; i++) {
-      const list = getList();
-      if (list.length >= minCount) return list;
+  // SPA 換頁時網址會先變，內容晚一點才換。等 main 裡的 h1 跟上一頁
+  // 不同再開始；上一頁沒有 h1 就退回 v1.0 的固定等待。最多等約 9 秒。
+  async function waitForContent(prevHeading, isFirst, signal) {
+    if (!isFirst && !prevHeading) await sleep(800);
+    for (let i = 0; i < 30; i++) {
+      if (signal.aborted) return false;
+      const ready = document.querySelector(PRMatch.SELECTOR);
+      if (ready && (isFirst || !prevHeading || headingText() !== prevHeading)) return true;
       await sleep(300);
     }
-    return getList();
+    return !signal.aborted && !!document.querySelector(PRMatch.SELECTOR);
   }
+
+  // 用 cleanText 排除我們自己插的英文，否則 clear() 之後標題就「變了」
+  function headingText() {
+    const h1 = document.querySelector('main h1');
+    return h1 ? PRMatch.cleanText(h1) : '';
+  }
+
 
   // ── 載入目標語言頁面 ───────────────────────────────────────
   // 課程內容是伺服器端輸出的，直接抓 HTML 解析就好，不用開 iframe
@@ -149,16 +166,31 @@
     }
   }
 
-  async function apply() {
-    if (running) return;
-    running = true;
-    try {
-      clear();
-      await waitForContent(() => [...document.querySelectorAll(PRMatch.SELECTOR)]);
-      const source = PRMatch.extractBlocks(document);
+  const signature = blocks => blocks.map(b => b.tag + b.text).join('\n');
+  const STALE_RETRIES = 2;
 
-      const doc = await loadDocument(PRLocale.buildTargetUrl(location.href));
-      if (!doc) return;
+  // 每次換頁都取消上一輪，確保最後停下來的那一頁一定會跑
+  async function apply(prevHeading, isFirst, retries = STALE_RETRIES) {
+    current?.abort();
+    const ctrl = new AbortController();
+    current = ctrl;
+    const { signal } = ctrl;
+    clear();
+    try {
+      if (!(await waitForContent(prevHeading, isFirst, signal))) return;
+      const url = location.href;
+      const source = PRMatch.extractBlocks(document);
+      const doc = await loadDocument(PRLocale.buildTargetUrl(url), signal);
+      // 載入期間使用者可能又換頁了
+      if (!doc || signal.aborted || location.href !== url) return;
+
+      // 快速連續換頁時，網址已經是新的但畫面可能還是上一頁。載入期間
+      // 畫面變了就代表剛才讀到的是舊內容，以它為基準重新等一次。
+      if (signature(PRMatch.extractBlocks(document)) !== signature(source)) {
+        const staleHeading = source.find(b => b.tag === 'H1')?.text || '';
+        if (retries > 0) apply(staleHeading, false, retries - 1);
+        return;
+      }
       const target = PRMatch.extractBlocks(doc);
 
       const { pairs, mode, skipped } = PRMatch.matchBlocks(source, target);
@@ -167,11 +199,12 @@
       } else if (skipped) {
         console.info(`${LOG} ${skipped} 個章節結構不同，已略過`);
       }
+      clear();
       render(source, target, pairs);
     } catch (err) {
       console.error(`${LOG} 失敗`, err);
     } finally {
-      running = false;
+      if (current === ctrl) current = null;
     }
   }
 
@@ -187,11 +220,27 @@
   };
   document.body.appendChild(btn);
 
-  // SPA 換頁偵測
-  setInterval(() => {
-    if (location.href !== lastUrl && PRLocale.detectLocale(location.href)) {
-      lastUrl = location.href;
-      setTimeout(apply, 800);
+  // ── SPA 換頁偵測 ───────────────────────────────────────────
+  // 網站點課程連結不會整頁重新載入，所以輪詢網址變化。
+  // hash 變化（頁內錨點）不算換頁。
+  const pageKey = () => location.origin + location.pathname + location.search;
+
+  function onRouteChange() {
+    const key = pageKey();
+    if (key === lastUrl) {
+      lastHeading = headingText();
+      return;
     }
-  }, 1000);
+    const isFirst = lastUrl === '';
+    lastUrl = key;
+    if (!PRLocale.detectLocale(location.href)) {
+      current?.abort();
+      clear();
+      return;
+    }
+    apply(lastHeading, isFirst);
+  }
+
+  onRouteChange();
+  setInterval(onRouteChange, 500);
 })();
