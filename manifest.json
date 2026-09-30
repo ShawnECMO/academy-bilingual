@@ -12,7 +12,7 @@
   "content_scripts": [
     {
       "matches": ["https://academy.claude.com/zh-TW/*"],
-      "js": ["content.js"],
+      "js": ["locale.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

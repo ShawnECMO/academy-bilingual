@@ -126,7 +126,7 @@
 
       const f = document.createElement('iframe');
       f.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;height:900px;visibility:hidden';
-      f.src = location.href.replace('/zh-TW/', '/en/');
+      f.src = PRLocale.buildTargetUrl(location.href);
       document.body.appendChild(f);
       await new Promise(r => (f.onload = r));
 
@@ -174,7 +174,7 @@
 
   // SPA 換頁偵測
   setInterval(() => {
-    if (location.href !== lastUrl && location.pathname.includes('/zh-TW/')) {
+    if (location.href !== lastUrl && PRLocale.detectLocale(location.href)) {
       lastUrl = location.href;
       setTimeout(apply, 800);
     }
