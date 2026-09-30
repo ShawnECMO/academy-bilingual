@@ -18,6 +18,8 @@
   // ────────────────────────────────────────────────────────────
 
   const LOG = '[Parallel Reader]';
+  // 對照語言。目前固定英文，之後做語言選單時改成使用者的選擇即可。
+  const TARGET_LOCALE = PRLocale.DEFAULT_LOCALE;
   let visible = true;
   let lastUrl = '';
   let lastHeading = ''; // 上一頁的 h1，用來判斷 SPA 換頁後內容換好了沒
@@ -180,7 +182,7 @@
       if (!(await waitForContent(prevHeading, isFirst, signal))) return;
       const url = location.href;
       const source = PRMatch.extractBlocks(document);
-      const doc = await loadDocument(PRLocale.buildTargetUrl(url), signal);
+      const doc = await loadDocument(PRLocale.buildTargetUrl(url, TARGET_LOCALE), signal);
       // 載入期間使用者可能又換頁了
       if (!doc || signal.aborted || location.href !== url) return;
 
@@ -211,8 +213,8 @@
   // 左下角切換按鈕
   const btn = document.createElement('button');
   btn.id = 'bi-toggle';
-  btn.textContent = 'EN';
-  btn.title = '顯示 / 隱藏英文原文';
+  btn.textContent = PRLocale.languageInfo(TARGET_LOCALE).label;
+  btn.hidden = true;
   btn.onclick = () => {
     visible = !visible;
     btn.classList.toggle('bi-off', !visible);
@@ -233,11 +235,16 @@
     }
     const isFirst = lastUrl === '';
     lastUrl = key;
-    if (!PRLocale.detectLocale(location.href)) {
+    const locale = PRLocale.detectLocale(location.href);
+    // 英文頁（或已經是對照語言的頁面）不用對照，按鈕也收起來
+    if (!locale || PRLocale.sameLanguage(locale, TARGET_LOCALE)) {
       current?.abort();
       clear();
+      btn.hidden = true;
       return;
     }
+    btn.title = PRLocale.languageInfo(locale).toggle;
+    btn.hidden = false;
     apply(lastHeading, isFirst);
   }
 

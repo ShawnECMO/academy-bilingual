@@ -55,7 +55,28 @@ var PRLocale = (() => {
     return pa === 'en' || !ra || !rb || ra === rb;
   }
 
-  return { DEFAULT_LOCALE, detectLocale, buildTargetUrl, sameLanguage };
+  // ── 語言設定 ───────────────────────────────────────────────
+  // 這裡只放「顯示用」的資料，不決定哪些語系會啟用；沒列到的語系
+  // 一樣會運作，只是介面文字退回英文。之後做語言選單也從這裡擴充。
+  //   label   目標語言按鈕上的縮寫
+  //   toggle  按鈕提示文字，依「使用者目前的頁面語系」顯示
+  const LANGUAGES = {
+    en: { name: 'English', label: 'EN', toggle: 'Show / hide English' },
+    'zh-TW': { name: '繁體中文', toggle: '顯示 / 隱藏英文原文' },
+    'zh-CN': { name: '简体中文', toggle: '显示 / 隐藏英文原文' },
+    ja: { name: '日本語', toggle: '英語の原文を表示 / 非表示' },
+    ko: { name: '한국어', toggle: '영어 원문 표시 / 숨기기' },
+  };
+
+  // 找語系設定：先找完全相同，再找主要語言相同（ja-JP → ja），最後退回英文
+  function languageInfo(locale) {
+    if (!locale) return LANGUAGES[DEFAULT_LOCALE];
+    const key = Object.keys(LANGUAGES).find(k => k.toLowerCase() === locale.toLowerCase())
+      || Object.keys(LANGUAGES).find(k => sameLanguage(k, locale) && !k.includes('-'));
+    return { ...LANGUAGES[DEFAULT_LOCALE], ...(key && LANGUAGES[key]) };
+  }
+
+  return { DEFAULT_LOCALE, LANGUAGES, detectLocale, buildTargetUrl, sameLanguage, languageInfo };
 })();
 
 if (typeof module === 'object') module.exports = PRLocale;

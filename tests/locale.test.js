@@ -1,7 +1,7 @@
 // 執行：node --test tests/
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detectLocale, buildTargetUrl, sameLanguage } = require('../locale.js');
+const { detectLocale, buildTargetUrl, sameLanguage, languageInfo } = require('../locale.js');
 
 const O = 'https://academy.claude.com';
 
@@ -69,4 +69,19 @@ test('sameLanguage', () => {
   assert.equal(sameLanguage('ko', 'ja'), false);
   assert.equal(sameLanguage('', 'en'), false);
   assert.equal(sameLanguage(null, 'en'), false);
+});
+
+test('languageInfo: 已列出的語系', () => {
+  assert.equal(languageInfo('zh-TW').toggle, '顯示 / 隱藏英文原文');
+  assert.equal(languageInfo('ja').name, '日本語');
+  assert.equal(languageInfo('ko').name, '한국어');
+  assert.equal(languageInfo('en').label, 'EN');
+});
+
+test('languageInfo: 地區變體退回主要語言、沒列到的退回英文', () => {
+  assert.equal(languageInfo('ja-JP').name, '日本語');
+  assert.equal(languageInfo('zh-tw').name, '繁體中文');
+  assert.equal(languageInfo('zh-HK').toggle, 'Show / hide English');
+  assert.equal(languageInfo('fr').toggle, 'Show / hide English');
+  assert.equal(languageInfo(null).label, 'EN');
 });
