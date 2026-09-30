@@ -1,5 +1,7 @@
 # 中英對照 for Claude Academy（非官方）
 
+https://github.com/user-attachments/assets/5f3d8228-874a-4478-9159-d1ef6ad3fdf2
+
 在 [Claude Academy](https://academy.claude.com/zh-TW/) 繁體中文課程頁面的每一段下方，顯示對應的官方英文原文。
 
 ## 功能
