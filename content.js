@@ -117,6 +117,37 @@
     return !signal.aborted && !!document.querySelector(PRMatch.SELECTOR);
   }
 
+  // 首次載入時網站會在伺服器輸出之後再改一輪文字（例如麵包屑從
+  // "Courses" 換成「課程」）。太早讀會拿到英文，跟目標頁一樣就被當成
+  // 「不用顯示」。等 main 安靜一小段時間再讀，最多等 3 秒。
+  const QUIET_MS = 400;
+  const QUIET_MAX_MS = 3000;
+
+  function waitForQuiet(signal) {
+    const main = document.querySelector('main');
+    if (!main) return Promise.resolve();
+    return new Promise(resolve => {
+      let timer;
+      const done = () => {
+        clearTimeout(timer);
+        clearTimeout(cap);
+        observer.disconnect();
+        signal.removeEventListener('abort', done);
+        resolve();
+      };
+      const observer = new MutationObserver(muts => {
+        // 我們自己插的英文不算
+        if (muts.every(m => [...m.addedNodes, ...m.removedNodes].every(n => n.dataset?.pr !== undefined))) return;
+        clearTimeout(timer);
+        timer = setTimeout(done, QUIET_MS);
+      });
+      observer.observe(main, { childList: true, subtree: true, characterData: true });
+      timer = setTimeout(done, QUIET_MS);
+      const cap = setTimeout(done, QUIET_MAX_MS);
+      signal.addEventListener('abort', done);
+    });
+  }
+
   // 用 cleanText 排除我們自己插的英文，否則 clear() 之後標題就「變了」
   function headingText() {
     const h1 = document.querySelector('main h1');
@@ -180,6 +211,8 @@
     clear();
     try {
       if (!(await waitForContent(prevHeading, isFirst, signal))) return;
+      await waitForQuiet(signal);
+      if (signal.aborted) return;
       const url = location.href;
       const source = PRMatch.extractBlocks(document);
       const doc = await loadDocument(PRLocale.buildTargetUrl(url, TARGET_LOCALE), signal);
@@ -187,12 +220,17 @@
       if (!doc || signal.aborted || location.href !== url) return;
 
       // 快速連續換頁時，網址已經是新的但畫面可能還是上一頁。載入期間
-      // 畫面變了就代表剛才讀到的是舊內容，以它為基準重新等一次。
-      if (signature(PRMatch.extractBlocks(document)) !== signature(source)) {
-        const staleHeading = source.find(b => b.tag === 'H1')?.text || '';
-        if (retries > 0) apply(staleHeading, false, retries - 1);
+      // 標題變了就代表剛才讀到的是舊頁面，以它為基準重新等一次。
+      // 只看標題：首次載入時網站會把伺服器輸出的英文麵包屑換成在地語言，
+      // 那是同一頁，不該觸發重試。
+      const sourceHeading = source.find(b => b.tag === 'H1')?.text || '';
+      if (headingText() !== sourceHeading) {
+        if (retries > 0) apply(sourceHeading, false, retries - 1);
         return;
       }
+      // 同一頁但段落有變（例如上面說的麵包屑），用最新的內容
+      const latest = PRMatch.extractBlocks(document);
+      if (signature(latest) !== signature(source)) source.splice(0, source.length, ...latest);
       const target = PRMatch.extractBlocks(doc);
 
       const { pairs, mode, skipped } = PRMatch.matchBlocks(source, target);
@@ -227,6 +265,12 @@
   // hash 變化（頁內錨點）不算換頁。
   const pageKey = () => location.origin + location.pathname + location.search;
 
+  // 只對整頁載入有效；SPA 換到不存在的頁面時，交給 matchBlocks 的結構檢查擋
+  function pageNotFound() {
+    const nav = performance.getEntriesByType('navigation')[0];
+    return !!nav && nav.responseStatus >= 400;
+  }
+
   function onRouteChange() {
     const key = pageKey();
     if (key === lastUrl) {
@@ -236,8 +280,10 @@
     const isFirst = lastUrl === '';
     lastUrl = key;
     const locale = PRLocale.detectLocale(location.href);
-    // 英文頁（或已經是對照語言的頁面）不用對照，按鈕也收起來
-    if (!locale || PRLocale.sameLanguage(locale, TARGET_LOCALE)) {
+    // 英文頁（或已經是對照語言的頁面）不用對照，按鈕也收起來。
+    // 網址像語系但頁面本身是 404（例如 /ja-JP/...）也一樣不動作。
+    // 註：<html lang> 不能拿來確認，網站在英文頁和 404 頁也會標成使用者的語系。
+    if (!locale || PRLocale.sameLanguage(locale, TARGET_LOCALE) || (isFirst && pageNotFound())) {
       current?.abort();
       clear();
       btn.hidden = true;
