@@ -1,12 +1,12 @@
 # 隱私權政策
 
-最後更新日期：2026 年 9 月 30 日
+最後更新日期：2026 年 10 月 1 日
 
-「中英對照 for Claude Academy」是一款非官方 Chrome 擴充功能，用於在 Claude Academy 繁體中文課程頁面下方顯示相對應的官方英文原文。
+「Parallel Reader for Claude Academy」（原名「中英對照 for Claude Academy」）是一款非官方 Chrome 擴充功能，用於在 Claude Academy 各語系（例如繁體中文、日文、韓文）課程頁面下方顯示相對應的官方英文原文。
 
 ## 處理的資料
 
-本擴充功能會在使用者瀏覽 Claude Academy 繁體中文課程時，讀取目前頁面的課程文字，並載入同一課程的官方英文頁面，以建立中英對照內容。
+本擴充功能會在使用者瀏覽 Claude Academy 非英文語系的課程時，讀取目前頁面的課程文字，並從 academy.claude.com 載入同一課程的官方英文頁面，以建立對照內容。使用者瀏覽英文頁面時，本擴充功能不會讀取或載入任何內容。
 
 這些網頁內容只會在使用者的瀏覽器本機進行處理。
 
@@ -23,7 +23,7 @@
 
 ## 權限用途
 
-本擴充功能僅在 `https://academy.claude.com/zh-TW/*` 上執行。此網站存取權限僅用於讀取 Claude Academy 課程文字、取得相對應的官方英文內容，並在目前頁面中顯示中英對照。
+本擴充功能僅在 `https://academy.claude.com/*` 上執行，不需要任何其他權限。此網站存取權限僅用於讀取 Claude Academy 課程文字、從同一網站取得相對應的官方英文內容，並在目前頁面中顯示對照。
 
 ## 資料保留與刪除
 
@@ -31,7 +31,7 @@
 
 ## Chrome Web Store Limited Use
 
-本擴充功能對使用者資料的使用符合 Chrome Web Store User Data Policy，包括 Limited Use requirements。所存取的資料僅用於提供本擴充功能明確揭露的中英對照閱讀功能。
+本擴充功能對使用者資料的使用符合 Chrome Web Store User Data Policy，包括 Limited Use requirements。所存取的資料僅用於提供本擴充功能明確揭露的對照閱讀功能。
 
 ## 第三方關係
 
