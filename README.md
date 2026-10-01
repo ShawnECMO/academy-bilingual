@@ -17,7 +17,7 @@ Read [Claude Academy](https://academy.claude.com/) in your language with the Eng
 
 ## 安裝
 
-- Chrome 線上應用程式商店：（上架後補上連結）
+- [Chrome 線上應用程式商店](https://chromewebstore.google.com/detail/cbjkoecolpgjneecmleadmcndpoahcaj)
 - 手動安裝：下載本 repo → 開啟 `chrome://extensions` → 開啟「開發人員模式」→「載入未封裝項目」→ 選擇本資料夾
 
 ## 運作方式
