@@ -156,18 +156,20 @@
 
 
   // ── 載入目標語言頁面 ───────────────────────────────────────
-  // 課程內容是伺服器端輸出的，直接抓 HTML 解析就好，不用開 iframe
-  // 跑整個網站的 JS。任何失敗（逾時、非 200、被轉到別的語系）都回傳
-  // null，讓呼叫端安靜放棄，不重試。
+  // 先抓 HTML 直接解析：大部分課程內容是伺服器端輸出的，這樣最快，
+  // 也不用跑網站的 JS。但互動練習（[data-living-embed]）是載入後
+  // 才由 JS 畫出來的，HTML 裡沒有，結構會對不上。這時才退回 v1.0 的
+  // 做法：開一個看不見的 iframe 讓英文頁完整跑完再讀。
+  // 任何失敗（逾時、非 200）都回傳 null，讓呼叫端安靜放棄，不重試。
   const FETCH_TIMEOUT_MS = 10000;
+  const FRAME_TIMEOUT_MS = 15000;
 
-  async function loadDocument(url, signal) {
-    if (!url) return null;
+  async function fetchDocument(url, signal) {
     const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         credentials: 'same-origin',
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        signal: AbortSignal.any([signal, timeout]),
       });
       if (!res.ok) return null;
       return new DOMParser().parseFromString(await res.text(), 'text/html');
@@ -176,6 +178,51 @@
         console.warn(`${LOG} 無法載入 ${url}`, err.message);
       }
       return null;
+    }
+  }
+
+  // 等 iframe 裡的段落數追上目前頁面（或逾時）再交出 document。
+  // 回傳 { doc, dispose }，讀完要呼叫 dispose 把 iframe 移掉。
+  function frameDocument(url, wantBlocks, signal) {
+    return new Promise(resolve => {
+      const f = document.createElement('iframe');
+      f.setAttribute('aria-hidden', 'true');
+      f.tabIndex = -1;
+      f.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;height:900px;visibility:hidden';
+      let poll;
+      const finish = ok => {
+        clearInterval(poll);
+        clearTimeout(cap);
+        signal.removeEventListener('abort', abort);
+        const doc = ok ? f.contentDocument : null;
+        resolve({ doc, dispose: () => f.remove() });
+        if (!doc) f.remove();
+      };
+      const abort = () => finish(false);
+      const cap = setTimeout(() => finish(true), FRAME_TIMEOUT_MS);
+      signal.addEventListener('abort', abort);
+      f.onload = () => {
+        poll = setInterval(() => {
+          const d = f.contentDocument;
+          if (d && d.querySelectorAll(PRMatch.SELECTOR).length >= wantBlocks) finish(true);
+        }, 300);
+      };
+      f.src = url;
+      document.body.appendChild(f);
+    });
+  }
+
+  const hasLiveWidgets = () => !!document.querySelector('main [data-living-embed]');
+
+  // 互動練習以外的段落，依序對回伺服器 HTML 裡同標籤的段落，用那邊的文字
+  function useServerText(framed, serverDoc) {
+    const server = PRMatch.extractBlocks(serverDoc);
+    let k = 0;
+    for (const b of framed) {
+      if (b.el.closest('[data-living-embed]')) continue;
+      while (k < server.length && server[k].tag !== b.tag) k++;
+      if (k >= server.length) return;
+      b.text = server[k++].text;
     }
   }
 
@@ -209,13 +256,21 @@
     current = ctrl;
     const { signal } = ctrl;
     clear();
+    let frame = null;
     try {
       if (!(await waitForContent(prevHeading, isFirst, signal))) return;
       await waitForQuiet(signal);
       if (signal.aborted) return;
       const url = location.href;
+      const targetUrl = PRLocale.buildTargetUrl(url, TARGET_LOCALE);
       const source = PRMatch.extractBlocks(document);
-      const doc = await loadDocument(PRLocale.buildTargetUrl(url, TARGET_LOCALE), signal);
+      const fetched = await fetchDocument(targetUrl, signal);
+      let doc = fetched;
+      // 這頁有互動練習時，HTML 裡沒有練習的文字，改用 iframe 等英文頁畫完
+      if (doc && hasLiveWidgets() && !signal.aborted) {
+        frame = await frameDocument(targetUrl, source.length, signal);
+        doc = frame.doc;
+      }
       // 載入期間使用者可能又換頁了
       if (!doc || signal.aborted || location.href !== url) return;
 
@@ -232,6 +287,9 @@
       const latest = PRMatch.extractBlocks(document);
       if (signature(latest) !== signature(source)) source.splice(0, source.length, ...latest);
       const target = PRMatch.extractBlocks(doc);
+      // iframe 裡的英文頁會跟著使用者的語系設定，把麵包屑等介面文字換成
+      // 在地語言。那些段落以伺服器輸出的 HTML（fetch 結果）為準。
+      if (frame) useServerText(target, fetched);
 
       const { pairs, mode, skipped } = PRMatch.matchBlocks(source, target);
       if (mode === 'mismatch') {
@@ -244,6 +302,7 @@
     } catch (err) {
       console.error(`${LOG} 失敗`, err);
     } finally {
+      frame?.dispose();
       if (current === ctrl) current = null;
     }
   }
